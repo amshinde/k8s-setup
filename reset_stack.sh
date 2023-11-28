@@ -6,50 +6,54 @@ set -o nounset
 reset_cluster() {
 	sudo -E kubeadm reset -f
 }
+
+cleanup_cni_configuration() {
+        # Remove existing CNI configurations:    
+        local cni_config_dir="/etc/cni"
+        local cni_interface="cni0"
+        sudo rm -rf /var/lib/cni/networks/*      
+        sudo rm -rf "${cni_config_dir}"/*        
+        if ip a show "$cni_interface"; then      
+                sudo ip link set dev "$cni_interface" down
+                sudo ip link del "$cni_interface"        
+        fi
+}
+
+# Reset kubernetes
+export KUBECONFIG="$HOME/.kube/config"
 reset_cluster
 
-for ctr in $(sudo crictl ps --quiet); do
-	sudo crictl stop "$ctr"
-	sudo crictl rm "$ctr"
-done
-for pod in $(sudo crictl pods --quiet); do
-	sudo crictl stopp "$pod"
-	sudo crictl rmp "$pod"
-done
-
-#Forcefull cleanup all artifacts
-#This is needed if things really go wrong
-sudo systemctl stop kubelet
-systemctl is-active crio && sudo systemctl stop crio
+sudo systemctl stop kubelet 
 systemctl is-active containerd && sudo systemctl stop containerd
+systemctl is-active crio && sudo systemctl stop crio
+
+cleanup_cni_configuration
+
+#cleanup stale file under /run
+sudo sh -c 'rm -rf /run/flannel'
+
+
+# The kubeadm reset process does not clean your kubeconfig files.
+# you must remove them manually.
+sudo -E rm -rf "$HOME/.kube"
+
+# Stop runc processes
+runc_path=$(command -v runc)
+runc_container_union="$($runc_path list)"
+if [ -n "$runc_container_union" ]; then
+        while IFS='$\n' read runc_container; do
+                container_id="$(echo "$runc_container" | awk '{print $1}')"
+                if [ "$container_id" != "ID" ]; then
+                        $runc_path delete -f $container_id
+                fi
+        done <<< "${runc_container_union}"
+fi
+
+
 sudo pkill -9 qemu
 sudo pkill -9 kata
 sudo pkill -9 kube
-sudo find /var/lib/containers/storage/overlay/ -path "*/merged" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-serviceaccount" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-proxy" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-termination-log" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-hosts" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-certs" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-hostname" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-resolv.conf" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*-shm" -exec umount {} \;
-sudo find /run/kata-containers/shared/sandboxes/ -path "*/*/rootfs" -exec umount {} \;
-sudo find /run/containers/storage/overlay-containers/ -path "*/userdata/shm" -exec umount {} \;
-sudo umount /run/netns/cni-*
-sudo -E bash -c "rm -r /var/lib/containers/storage/overlay*/*"
-sudo -E bash -c "rm -r /var/lib/cni/networks/*"
-sudo -E bash -c "rm -r /var/run/kata-containers/*"
-sudo rm -rf /var/lib/rook
-sudo -E bash -c "rm -rf /var/lib/etcd"
 
-sudo systemctl daemon-reload
-sudo systemctl is-active crio && sudo systemctl stop crio
-sudo systemctl is-active containerd && sudo systemctl stop containerd
-sudo systemctl is-enabled crio && sudo systemctl restart crio
 sudo systemctl is-enabled containerd && sudo systemctl restart containerd
-
-sudo systemctl restart kubelet
-
-reset_cluster
-sudo -E bash -c "rm -rf /var/lib/containerd/*"
+#sudo systemctl restart kubelet
+#reset_cluster

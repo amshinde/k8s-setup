@@ -7,14 +7,15 @@ This assumes you are on an Ubuntu VM which supports VMX.
  
 Install Kubernetes, containerd, CNI plugins, disable swap, enable br_netfilter and ip_forwarding for ipv4: 
 ```bash  
-./install-prereqs.sh 
+./install-k8s.sh
+./install-containerd.sh 
 ``` 
  
 ## Start a cluster 
  
 We start a cluster using a  kubeadm configuration yaml `kubeadm.yaml` included in the repo: 
 ```bash 
-./create_stack.sh 
+./create_k8s_node.sh 
 ``` 
  
 ## Setup kata

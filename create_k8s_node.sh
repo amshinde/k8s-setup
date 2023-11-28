@@ -1,7 +1,7 @@
-sudo swapoff -a
-sudo modprobe br_netfilter
+#sudo swapoff -a
+#sudo modprobe br_netfilter
 
-echo 1 | sudo tee -a /proc/sys/net/ipv4/ip_forward > /dev/null
+#echo 1 | sudo tee -a /proc/sys/net/ipv4/ip_forward > /dev/null
 
 sudo systemctl daemon-reload && sudo systemctl restart kubelet && sudo systemctl restart containerd
 
@@ -17,4 +17,5 @@ sudo chown "$(id -u):$(id -g)" "${HOME}/.kube/config"
 # taint master node:
 kubectl taint nodes --all node-role.kubernetes.io/master-
 
-kubectl apply -f https://docs.projectcalico.org/v3.10/manifests/canal.yaml
+kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/v0.21.0/Documentation/kube-flannel.yml
+#kubectl apply -f https://docs.projectcalico.org/v3.10/manifests/canal.yaml
